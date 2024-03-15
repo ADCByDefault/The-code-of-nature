@@ -145,6 +145,7 @@ class Plane {
      * @param {Vector3D} v1
      * @param {Vector3D} v2
      * @param {Vector3D} v3
+     * vectors are considered to start from the same point
      * @returns {Plane}
      */
     static planeFromVectors(v1, v2, v3) {
@@ -166,7 +167,7 @@ class Plane {
      *
      * @param {Ray} ray
      * @param {Plane} plane
-     * @returns {number}
+     * @returns {number} parametric value of the ray at the intersection point
      */
     static planeRayIntersection(ray, plane) {
         let t =
@@ -185,8 +186,8 @@ class Plane {
 class Ray {
     /**
      *
-     * @param {Vector3D} origin
-     * @param {Vector3D} direction
+     * @param {Vector3D} start
+     * @param {Vector3D} end
      * @param {string} color
      */
     constructor(start, end, color) {
@@ -229,6 +230,7 @@ class Triangle {
      * @param {Vector3D} a
      * @param {Vector3D} b
      * @param {Vector3D} c
+     * @param {string} color
      */
     constructor(a, b, c, color) {
         this.a = a;
@@ -247,7 +249,8 @@ class Triangle {
      *
      * @param {Ray} ray
      * @param {Triangle} triangle
-     * @returns {boolean}
+     * @returns {boolean | number} false if no intersection,
+     * parametric value of the ray at the intersection point otherwise
      */
     static triangleRayIntersection(ray, triangle) {
         let t = Ray.planeRayIntersection(ray, triangle.plane);
@@ -256,8 +259,8 @@ class Triangle {
         let t2 = new Triangle(i, triangle.b, triangle.c);
         let t3 = new Triangle(i, triangle.c, triangle.a);
         if (
-            (t1.area + t2.area + t3.area) * 10000000 <=
-            triangle.area + triangle.area * 10000000
+            (t1.area + t2.area + t3.area) * 1000000000 <=
+            triangle.area + triangle.area * 1000000000
         ) {
             return t;
         }
@@ -270,27 +273,13 @@ class MatrixVector4D {
      * @param {number} x
      * @param {number} y
      * @param {number} z
-     * @param {number} w
+     * @param {number} w is the translation
      */
     constructor(x, y, z, w) {
         this.x = x;
         this.y = y;
         this.z = z;
         this.w = w;
-    }
-    /**
-     *
-     * @param {MatrixVector4D} v
-     * @param {number} round
-     * @returns {MatrixVector4D}
-     */
-    static roundMatrixVector4D(v, round) {
-        let n = new MatrixVector4D(0, 0, 0, 0);
-        n.x = v.x > round ? v.x : 0;
-        n.y = v.y > round ? v.y : 0;
-        n.z = v.z > round ? v.z : 0;
-        n.w = v.w > round ? v.w : 0;
-        return n;
     }
 }
 class Matrix {
@@ -299,6 +288,7 @@ class Matrix {
      * @param {MatrixVector4D} i
      * @param {MatrixVector4D} j
      * @param {MatrixVector4D} k
+     * by default vectors are the basis of the space with no translation
      */
     constructor(i, j, k) {
         this.i = i ? i : new MatrixVector4D(1, 0, 0, 0);
@@ -325,7 +315,6 @@ class Matrix {
      * @param {Matrix} m1
      * @returns {Matrix}
      */
-
     static multiplyMatrix(m1, m2) {
         let i = new MatrixVector4D(
             m1.i.x * m2.i.x + m1.j.x * m2.i.y + m1.k.x * m2.i.z,
@@ -351,6 +340,8 @@ class Matrix {
      * @param {Matrix} m
      * @param {number} angle
      * @returns {Matrix}
+     * rotate the matrix around the x(i) axis
+     * rotate the yz plane
      * */
     static rotateX(m, angle) {
         let cos = Math.cos(angle);
@@ -364,6 +355,8 @@ class Matrix {
      * @param {Matrix} m
      * @param {number} angle
      * @returns {Matrix}
+     * rotate the matrix around the y(j) axis
+     * rotate the xz plane
      * */
     static rotateY(m, angle) {
         let cos = Math.cos(angle);
@@ -377,6 +370,8 @@ class Matrix {
      * @param {Matrix} m
      * @param {number} angle
      * @returns {Matrix}
+     * rotate the matrix around the z(k) axis
+     * rotate the xy plane
      * */
     static rotateZ(m, angle) {
         let cos = Math.cos(angle);
@@ -390,11 +385,13 @@ class Matrix {
 
 class Film {
     /**
-     *
+     * @param {Vector3D} position is just the traslation of the film
      * @param {number} width
      * @param {number} height
-     * @param {CanvasRenderingContext2D} canvas
+     * @param {CanvasRenderingContext2D} ctx
      * @param {number} pixelSize
+     * Film is defined by a position and a width and height
+     * recommended position is (0, 0, 0)
      */
     constructor(position, width, height, ctx, pixelSize) {
         this.position = position;
@@ -406,6 +403,11 @@ class Film {
         this.pixelSize = pixelSize;
         this.pixelsOnFilm = [];
         this.pixelsInSpace = [];
+        /**
+         * creating the pixels on the film and
+         * their corresponding position in the space
+         * pixel goes from left to right row by row
+         */
         for (
             let i = this.halfHeight;
             i >= -this.halfHeight;
@@ -425,7 +427,7 @@ class Film {
         }
     }
     /**
-     *
+     * x and y are the position of the pixel on the film
      * @param {number} x
      * @param {number} y
      * @param {string} color
@@ -434,6 +436,10 @@ class Film {
         this.ctx.fillStyle = color;
         this.ctx.fillRect(x, y, this.pixelSize, this.pixelSize);
     }
+    /**
+     * @param {number} i is the index of the pixel on the film
+     * @param {string} color
+     */
     drawPixelbyIndex(i, color) {
         this.ctx.fillStyle = color;
         this.ctx.fillRect(
@@ -446,24 +452,29 @@ class Film {
 }
 class Camera {
     /**
-     * @param {Matrix} position
-     * @param {Vector3D} lookAt
+     * @param {Matrix} matrix
      * @param {Film} film
-     * @param {number} distance
+     * @param {number} distance of film from the camera (fov)
      * */
     constructor(matrix, film, distance) {
         this.matrix = matrix;
-        this.position = new Vector3D(matrix.i.w, matrix.j.w, matrix.k.w);
         this.film = film;
         this.distance = distance;
-        this.traceThroughPixels = film.pixelsInSpace.map((p) => {
-            return new Vector3D(p.x, p.y, distance);
+        /**
+         * pixels in the space that the camera will trace through
+         */
+        this.traceThroughPixels = [];
+        this.film.pixelsInSpace.forEach((p, i) => {
+            this.traceThroughPixels[i] = Matrix.multiplyVector(
+                this.matrix,
+                new Vector3D(p.x, p.y, this.distance)
+            );
         });
     }
     /**
      *
-     * @param {number} i
-     * @returns {Ray}
+     * @param {number} i is the index of the pixel on the film
+     * @returns {Ray} from the camera to the pixel in the space
      */
     trace(i) {
         let start = new Vector3D(
@@ -471,11 +482,21 @@ class Camera {
             this.matrix.j.w,
             this.matrix.k.w
         );
-        let end = Matrix.multiplyVector(
-            this.matrix,
-            this.traceThroughPixels[i]
-        );
+        let end = this.traceThroughPixels[i];
         return new Ray(start, end);
+    }
+    /**
+     *
+     * @param {Matrix} matrix
+     */
+    setMatrix(matrix) {
+        this.matrix = matrix;
+        this.film.pixelsInSpace.forEach((p, i) => {
+            this.traceThroughPixels[i] = Matrix.multiplyVector(
+                this.matrix,
+                new Vector3D(p.x, p.y, this.distance)
+            );
+        });
     }
 }
 
@@ -487,8 +508,8 @@ let cameraMatrix = new Matrix(
 cameraMatrix = Matrix.rotateZ(cameraMatrix, 0 * (Math.PI / 180));
 cameraMatrix = Matrix.rotateX(cameraMatrix, 0 * (Math.PI / 180));
 cameraMatrix = Matrix.rotateY(cameraMatrix, 0 * (Math.PI / 180));
-let film = new Film(new Vector3D(0, 0, 0), 600, 400, ctx, 3);
-let camera = new Camera(cameraMatrix, film, 600);
+let film = new Film(new Vector3D(0, 0, 0), 300, 300, ctx, 2);
+let camera = new Camera(cameraMatrix, film, 400);
 let mesh = [
     new Triangle(
         new Vector3D(-150, -150, -150),
@@ -568,22 +589,22 @@ let meshMatrix = new Matrix(
     new MatrixVector4D(0, 1, 0, 0),
     new MatrixVector4D(0, 0, 1, 1000)
 );
-meshMatrix = Matrix.rotateX(meshMatrix, 30 * (Math.PI / 180));
-meshMatrix = Matrix.rotateY(meshMatrix, 50 * (Math.PI / 180));
-meshMatrix = Matrix.rotateZ(meshMatrix, 90 * (Math.PI / 180));
+meshMatrix = Matrix.rotateX(meshMatrix, 0 * (Math.PI / 180));
+meshMatrix = Matrix.rotateY(meshMatrix, 0 * (Math.PI / 180));
+meshMatrix = Matrix.rotateZ(meshMatrix, 0 * (Math.PI / 180));
 
-let alpha = 0;
-let beta = 0;
-let theta = 0;
+let alpha = -3.2;
+let beta = 1;
+let theta = 2;
 function animate() {
     console.time("frame");
     requestAnimationFrame(animate);
-    alpha = alpha - 0.05;
-    beta = beta + -0.01;
-    theta = theta + 0.05;
     meshMatrix = Matrix.rotateX(meshMatrix, alpha * (Math.PI / 180));
     meshMatrix = Matrix.rotateY(meshMatrix, beta * (Math.PI / 180));
     meshMatrix = Matrix.rotateZ(meshMatrix, theta * (Math.PI / 180));
+    // cameraMatrix = Matrix.rotateX(cameraMatrix, -0.3 * (Math.PI / 180));
+    // cameraMatrix.j.w += 7;
+    // camera.setMatrix(cameraMatrix);
     let tmesh = mesh.map((t) => {
         return new Triangle(
             Matrix.multiplyVector(meshMatrix, t.a),
@@ -598,7 +619,7 @@ function animate() {
         let te = Infinity;
         for (let j = 0; j < tmesh.length; j++) {
             let t = Triangle.triangleRayIntersection(ray, tmesh[j]);
-            if (!t) continue;
+            if (!t || t < 0) continue;
             if (t < te) {
                 te = t;
                 ray.color = tmesh[j].color;
